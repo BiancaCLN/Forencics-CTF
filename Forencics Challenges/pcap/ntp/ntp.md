@@ -1,4 +1,4 @@
-# Challenge — `ntp_capture.pcap`
+# NTP PCAP
 
 ## Summary
 The capture contained NTP traffic that — when inspected and the UDP payloads aligned — revealed a hidden CTF message. The PCAP included NTP packets on port 123; some packets were flagged as malformed (truncated payloads / unexpected lengths). Because NTP uses UDP (no stream reassembly by TCP), the hidden message was split across multiple datagrams and required extracting each UDP payload and concatenating them in time order to reconstruct the plaintext.
