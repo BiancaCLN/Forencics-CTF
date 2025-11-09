@@ -51,13 +51,3 @@ In this challenge the “malformed” indication likely meant either:
 
 ---
 
-## Investigative approach (safe, read-only)
-**Principles:** don’t execute anything you decode; work on a copy of the pcap; use static analysis and text extraction.
-
-### 1) Inspect basic stats
-```bash
-# quick summary
-tshark -r ntp_capture.pcap -q -z io,stat,0
-
-# show protocols/ports counts
-tshark -r ntp_capture.pcap -q -z conv,udp
