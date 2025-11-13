@@ -187,15 +187,4 @@ At every step, the attacker attempts to hide:
 
 By manually removing the execution components and decoding each stage, the full chain can be reconstructed and the final payload/flag is recovered.
 
----
 
-# ✔ Additional Assistance
-
-I can generate:
-
-* A PDF report
-* A diagram of the 5-stage execution chain
-* IOC list
-* Clean decoded versions of each stage
-
-Just let me know!
